@@ -203,6 +203,7 @@ app.get("/admin/best-profession", async (req, res) => {
             },
             include: {
                 model: Profile,
+                where : { type : "contractor"},
                 as: 'Contractor'
             }
         }
@@ -212,7 +213,7 @@ app.get("/admin/best-profession", async (req, res) => {
     let currentHighest = null;
     Jobs.forEach((job) => {
         const profession = job.Contract.Contractor.profession;
-        if (professionalAndGeneratedTotal.has(job.Contract.Contractor.profession)) {
+        if (professionalAndGeneratedTotal.has(profession)) {
             const newTotal = professionalAndGeneratedTotal.get(profession) + job.price;
             if (newTotal > currentHighest.total) {
                 currentHighest = { name: profession, total: newTotal };
@@ -223,6 +224,69 @@ app.get("/admin/best-profession", async (req, res) => {
                 currentHighest = { name: profession, total: job.price };
             }
             professionalAndGeneratedTotal.set(profession, job.price);
+        }
+    });
+
+    res.send(currentHighest);
+});
+
+
+app.get("/admin/best-clients", async (req, res) => {
+    const { Contract, Job, Profile } = req.app.get('models');
+
+    const queryObject = new URLSearchParams(req.query);
+    if (!queryObject.has("start") || !queryObject.has("end"))
+        return res.status(400).send("start or end date missing");
+
+    const start = new Date(queryObject.get("start"));
+    const end = new Date(queryObject.get("end"));
+    const limit = queryObject.get("limit") || 2;
+ 
+    const Jobs = await Job.findAll({
+        where: {
+            paid: true,
+        },
+        include:
+        {
+            model: Contract,
+            where: {
+                [Op.and]: [{
+                    updatedAt: {
+                        [Op.gte]: start
+                    }
+                },
+                {
+                    updatedAt: {
+                        [Op.lte]: end
+                    }
+                }
+                ]
+            },
+            include: {
+                model: Profile,
+                where : { type : "client"},
+                as: 'Client'
+            }
+        }, 
+        limit : limit
+    });
+
+    const professionalAndGeneratedTotal = new Map();
+    let currentHighest = null;
+    Jobs.forEach((job) => {
+        const {id : clientId, firstName, lastName} = job.Contract.Client;
+
+        if (professionalAndGeneratedTotal.has(clientId)) {
+            const newTotal = professionalAndGeneratedTotal.get(clientId) + job.price;
+            if (newTotal > currentHighest.total) {
+                currentHighest = {clientId, firstName, lastName, total: newTotal };
+            }
+            professionalAndGeneratedTotal.set(clientId, newTotal);
+        } else {
+            if (currentHighest === null || currentHighest.total < job.price) {
+                currentHighest = { clientId, firstName, lastName, total: job.price };
+            }
+            professionalAndGeneratedTotal.set(clientId, job.price);
         }
     });
 
