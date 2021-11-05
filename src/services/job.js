@@ -64,16 +64,18 @@ const payForJob = async (models, sequelize, req, res) => {
         await Job.update({ paid: true }, { where: { id: job_id } });
 
         await t.commit();
-        return res.send('payment successful');
+        res.send('payment successful');
+        return true;
     }
     catch (error) {
         console.log(error);
         await t.rollback();
         //we could have a better way to handle this error,
         //maybe log it and even find a way to let users know what happened at our end;
-        return res.status().send("could not complete this transaction, try again later");
+        res.status().send("could not complete this transaction, try again later");
+        return false;
 
     }
 };
 
-module.exports = { getUnpaidJob,payForJob };
+module.exports = { getUnpaidJob, payForJob };

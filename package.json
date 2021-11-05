@@ -10,10 +10,12 @@
   },
   "scripts": {
     "start": "nodemon ./src/server.js",
-    "seed": "node ./scripts/seedDb.js"
+    "seed": "node ./scripts/seedDb.js",
+    "test": "jest"
   },
   "devDependencies": {
     "concurrently": "4.1.0",
+    "jest": "^27.3.1",
     "nodemon": "1.19.1"
   },
   "engines": {
