@@ -96,8 +96,6 @@ app.get("/jobs/unpaid", getProfile, async (req, res) => {
     res.json(jobs);
 });
 
-const getNewModel = (name) => app.get('models')[name];
-
 app.post("/jobs/:job_id/pay", getProfile, async (req, res) => {
     const sequelize = app.get('sequelize');
     const t = await sequelize.transaction();
@@ -136,5 +134,38 @@ app.post("/jobs/:job_id/pay", getProfile, async (req, res) => {
         console.log(error);
         await t.rollback();
     }
+});
+
+/**
+ * Don't think I fully understand this question and also
+ * I don't understand what this userid is exactly but I will assume a client 
+ * only make deposit into his account for now. 
+ * so I assume this userId is same as profileId from the middleware
+ * */
+app.post("/balances/deposit/:userId", getProfile, async (req, res) => {
+    const { Profile, Contract, Job } = req.app.get('models');
+    const { id: profileId } = req.profile;
+    const {amount} = req.body;
+
+    const allJobsToPay = await Job.findAll({
+        where: {
+            paid: { [Op.is]: null }
+        },
+        include: { model: Contract, where: { ClientId: profileId, status: "in_progress" } }
+    });
+
+
+
+    const maxAmountToPay = allJobsToPay.reduce((acc, job) => acc + job.price, 0);
+    console.log("max age check ", maxAmountToPay)
+    const percentagemax = maxAmountToPay * 0.25;
+    const amountToDeposit = parseInt(amount);
+    if(!isNaN(amountToDeposit) && amountToDeposit <= percentagemax){
+        Profile.increment({balance : amountToDeposit}, {where : {id : profileId}})
+        res.status(200).send(`${amountToDeposit} deposited`);
+    }else{
+        res.status(400).send(`sorry but you can't deposit more than ${percentagemax} at once`)
+    }
+
 });
 module.exports = app;
