@@ -13,7 +13,7 @@ const { Op } = require('sequelize');
  * @returns contract by id
  */
 app.get('/contracts/:id', getProfile, async (req, res) => {
-    const { Contract, Profile } = req.app.get('models');
+    const { Contract } = req.app.get('models');
     const { id: profileId } = req.profile;
     const id = parseInt(req.params.id);
     if (isNaN(id))
@@ -26,6 +26,35 @@ app.get('/contracts/:id', getProfile, async (req, res) => {
                 { ContractorId: profileId },
                 { ClientId: profileId }
             ]
+        }
+    });
+
+    if (!contract) return res.status(404).end();
+    res.json(contract);
+});
+
+app.get('/contracts', getProfile, async (req, res) => {
+    const { Contract } = req.app.get('models');
+    const { id: profileId } = req.profile;
+
+    const contract = await Contract.findAll({
+        where: {
+            [Op.and]: [
+                {
+                    [Op.or]: [
+                        { ContractorId: profileId },
+                        { ClientId: profileId }
+                    ]
+                },
+                {
+
+                    status: {
+                        [Op.ne]: 'terminated'
+                    }
+                }
+
+            ]
+
         }
     });
 
