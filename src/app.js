@@ -61,4 +61,38 @@ app.get('/contracts', getProfile, async (req, res) => {
     if (!contract) return res.status(404).end();
     res.json(contract);
 });
+
+app.get("/jobs/unpaid", getProfile, async (req, res) => {
+    const { Job, Contract } = req.app.get("models");
+    const { id: profileId } = req.profile;
+
+    const jobs = await Job.findAll({
+        where: {
+            paid: {
+                [Op.is]: null
+            }
+        },
+        include: [{
+            model: Contract,
+            where: {
+                [Op.and]: [
+                    {
+                        [Op.or]: [
+                            { ContractorId: profileId },
+                            { ClientId: profileId }
+                        ]
+                    },
+                    {
+                        status: {
+                            [Op.eq]: 'in_progress'
+                        }
+                    }
+                ]
+            }
+
+        }]
+    });
+    if (!jobs) return res.status(404).end();
+    res.json(jobs);
+});
 module.exports = app;
