@@ -7,6 +7,7 @@ app.use(bodyParser.json());
 app.set('sequelize', sequelize);
 app.set('models', sequelize.models);
 const { Op } = require('sequelize');
+const { URLSearchParams } = require('url');
 
 /**
  * FIX ME!
@@ -145,7 +146,7 @@ app.post("/jobs/:job_id/pay", getProfile, async (req, res) => {
 app.post("/balances/deposit/:userId", getProfile, async (req, res) => {
     const { Profile, Contract, Job } = req.app.get('models');
     const { id: profileId } = req.profile;
-    const {amount} = req.body;
+    const { amount } = req.body;
 
     const allJobsToPay = await Job.findAll({
         where: {
@@ -157,15 +158,74 @@ app.post("/balances/deposit/:userId", getProfile, async (req, res) => {
 
 
     const maxAmountToPay = allJobsToPay.reduce((acc, job) => acc + job.price, 0);
-    console.log("max age check ", maxAmountToPay)
+    console.log("max age check ", maxAmountToPay);
     const percentagemax = maxAmountToPay * 0.25;
     const amountToDeposit = parseInt(amount);
-    if(!isNaN(amountToDeposit) && amountToDeposit <= percentagemax){
-        Profile.increment({balance : amountToDeposit}, {where : {id : profileId}})
+    if (!isNaN(amountToDeposit) && amountToDeposit <= percentagemax) {
+        Profile.increment({ balance: amountToDeposit }, { where: { id: profileId } });
         res.status(200).send(`${amountToDeposit} deposited`);
-    }else{
-        res.status(400).send(`sorry but you can't deposit more than ${percentagemax} at once`)
+    } else {
+        res.status(400).send(`sorry but you can't deposit more than ${percentagemax} at once`);
     }
 
+});
+
+
+app.get("/admin/best-profession", async (req, res) => {
+    const { Contract, Job, Profile } = req.app.get('models');
+
+    const queryObject = new URLSearchParams(req.query);
+    if (!queryObject.has("start") || !queryObject.has("end"))
+        return res.status(400).send("start or end date missing");
+
+    const start = new Date(queryObject.get("start"));
+    const end = new Date(queryObject.get("end"));
+
+    const Jobs = await Job.findAll({
+        where: {
+            paid: true,
+        },
+        include:
+        {
+            model: Contract,
+            where: {
+                [Op.and]: [{
+                    updatedAt: {
+                        [Op.gte]: start
+                    }
+                },
+                {
+                    updatedAt: {
+                        [Op.lte]: end
+                    }
+                }
+                ]
+            },
+            include: {
+                model: Profile,
+                as: 'Contractor'
+            }
+        }
+    });
+
+    const professionalAndGeneratedTotal = new Map();
+    let currentHighest = null;
+    Jobs.forEach((job) => {
+        const profession = job.Contract.Contractor.profession;
+        if (professionalAndGeneratedTotal.has(job.Contract.Contractor.profession)) {
+            const newTotal = professionalAndGeneratedTotal.get(profession) + job.price;
+            if (newTotal > currentHighest.total) {
+                currentHighest = { name: profession, total: newTotal };
+            }
+            professionalAndGeneratedTotal.set(profession, newTotal);
+        } else {
+            if (currentHighest === null || currentHighest.total < job.price) {
+                currentHighest = { name: profession, total: job.price };
+            }
+            professionalAndGeneratedTotal.set(profession, job.price);
+        }
+    });
+
+    res.send(currentHighest);
 });
 module.exports = app;
