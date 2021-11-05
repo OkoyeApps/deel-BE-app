@@ -95,4 +95,46 @@ app.get("/jobs/unpaid", getProfile, async (req, res) => {
     if (!jobs) return res.status(404).end();
     res.json(jobs);
 });
+
+const getNewModel = (name) => app.get('models')[name];
+
+app.post("/jobs/:job_id/pay", getProfile, async (req, res) => {
+    const sequelize = app.get('sequelize');
+    const t = await sequelize.transaction();
+    try {
+        const { Job, Profile } = req.app.get('models');
+        const { id: profileId, balance: profileBalance } = req.profile;
+        const { job_id } = req.params;
+
+        //find jobs by id
+        const currentJob = await Job.findOne({ where: { id: job_id }, include: 'Contract' });
+        if (!currentJob) return res.status(404).send("Job not found or payment");
+
+        if (currentJob.paid) return res.status(200).send("Payment already made for job");
+
+        if (currentJob.balance > profileBalance) return res.status(400).send(`your balance need to be >= ${currentJob.balance} for payment`);
+
+        const contractorId = currentJob.Contract.ContractorId;
+
+        //add amount to contractor balance
+        const jobContractor = await Profile.findOne({ where: { id: contractorId } });
+        const newContractorBalance = jobContractor.balance + currentJob.price;
+        await Profile.update({ balance: newContractorBalance }, { where: { id: contractorId } }, { transaction: t });
+
+        //subtract amount from client balance
+        const clientNewBalance = profileBalance - currentJob.price;
+        await Profile.update({ balance: clientNewBalance }, { where: { id: profileId } }, { transaction: t });
+
+        //update paid status of job
+        await Job.update({ paid: true }, { where: { id: job_id } });
+
+        await t.commit();
+
+        res.send('payment successful');
+    }
+    catch (error) {
+        console.log(error);
+        await t.rollback();
+    }
+});
 module.exports = app;
