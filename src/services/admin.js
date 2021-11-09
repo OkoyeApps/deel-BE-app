@@ -1,9 +1,14 @@
 const { URLSearchParams } = require('url');
-const { Op } = require('sequelize');
+const { QueryTypes } = require('sequelize');
 
-const getBestProfession = async (models, req) => {
-    const { Contract, Job, Profile } = models;
 
+/**
+ * @url(https://knexjs.org/)
+ * I normally make use of the Knex to build my query but because its an interview and am not sure if
+ * am allowed to do that I had to use the sql aggregate functions writing it this way
+ */
+
+const getBestProfession = async (req, sequelize) => {
     const queryObject = new URLSearchParams(req.query);
     if (!queryObject.has("start") || !queryObject.has("end"))
         return res.status(400).send("start or end date missing");
@@ -11,58 +16,22 @@ const getBestProfession = async (models, req) => {
     const start = new Date(queryObject.get("start"));
     const end = new Date(queryObject.get("end"));
 
-    const Jobs = await Job.findAll({
-        where: {
-            paid: true,
-        },
-        include:
-        {
-            model: Contract,
-            where: {
-                [Op.and]: [{
-                    updatedAt: {
-                        [Op.gte]: start
-                    }
-                },
-                {
-                    updatedAt: {
-                        [Op.lte]: end
-                    }
-                }
-                ]
-            },
-            include: {
-                model: Profile,
-                where: { type: "contractor" },
-                as: 'Contractor'
-            }
-        }
-    });
+    const result = await sequelize.query(`SELECT  p.profession, SUM(Jobs.price) AS total FROM Jobs 
+    inner join Contracts CN on CN.id = Jobs.ContractId
+    inner join Profiles P on P.id = CN.ContractorId
+    where Jobs.paid is NOT NULL AND Jobs.updatedAt >= :start AND Jobs.updatedAt <= :end
+    GROUP By P.profession
+    ORDER BY total DESC`, { type: QueryTypes.SELECT, replacements: { start, end } });
 
-    const professionalAndGeneratedTotal = new Map();
-    let currentHighest = null;
-    Jobs.forEach((job) => {
-        const profession = job.Contract.Contractor.profession;
-        if (professionalAndGeneratedTotal.has(profession)) {
-            const newTotal = professionalAndGeneratedTotal.get(profession) + job.price;
-            if (newTotal > currentHighest.total) {
-                currentHighest = { name: profession, total: newTotal };
-            }
-            professionalAndGeneratedTotal.set(profession, newTotal);
-        } else {
-            if (currentHighest === null || currentHighest.total < job.price) {
-                currentHighest = { name: profession, total: job.price };
-            }
-            professionalAndGeneratedTotal.set(profession, job.price);
-        }
-    });
-
-    return currentHighest;
+    return result;
 };
 
-const getBestClients = async (models, req) => {
-    const { Contract, Job, Profile } = models;
-
+/**
+ * @url(https://knexjs.org/)
+ * I normally make use of the Knex to build my query but because its an interview and am not sure if
+ * am allowed to do that I had to use the sql aggregate functions writing it this way
+ */
+const getBestClients = async (req, sequelize) => {
     const queryObject = new URLSearchParams(req.query);
     if (!queryObject.has("start") || !queryObject.has("end"))
         return res.status(400).send("start or end date missing");
@@ -71,54 +40,16 @@ const getBestClients = async (models, req) => {
     const end = new Date(queryObject.get("end"));
     const limit = queryObject.get("limit") || 2;
 
-    const Jobs = await Job.findAll({
-        where: {
-            paid: true,
-        },
-        include:
-        {
-            model: Contract,
-            where: {
-                [Op.and]: [{
-                    updatedAt: {
-                        [Op.gte]: start
-                    }
-                },
-                {
-                    updatedAt: {
-                        [Op.lte]: end
-                    }
-                }
-                ]
-            },
-            include: {
-                model: Profile,
-                where: { type: "client" },
-                as: 'Client'
-            }
-        },
-        limit: limit
-    });
+    const result = await sequelize.query(`SELECT p.id,  p.firstName ||' ' ||  p.lastName as fullName, SUM(Jobs.price) AS paid FROM Jobs 
+    inner join Contracts CN on CN.id = Jobs.ContractId
+    inner join Profiles P on P.id = CN.ContractorId
+    where Jobs.paid is NOT NULL AND Jobs.updatedAt >= :start AND Jobs.updatedAt <= :end
+    GROUP By P.id
+    ORDER BY paid DESC
+    Limit :limit
+    `, { type: QueryTypes.SELECT, replacements: { start, end, limit } });
 
-    const professionalAndGeneratedTotal = new Map();
-    let currentHighest = null;
-    Jobs.forEach((job) => {
-        const { id: clientId, firstName, lastName } = job.Contract.Client;
-
-        if (professionalAndGeneratedTotal.has(clientId)) {
-            const newTotal = professionalAndGeneratedTotal.get(clientId) + job.price;
-            if (newTotal > currentHighest.total) {
-                currentHighest = { clientId, firstName, lastName, total: newTotal };
-            }
-            professionalAndGeneratedTotal.set(clientId, newTotal);
-        } else {
-            if (currentHighest === null || currentHighest.total < job.price) {
-                currentHighest = { clientId, firstName, lastName, total: job.price };
-            }
-            professionalAndGeneratedTotal.set(clientId, job.price);
-        }
-    });
-    return currentHighest;
+    return result;
 };
 
 module.exports = { getBestProfession, getBestClients };

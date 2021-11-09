@@ -52,13 +52,13 @@ app.post("/balances/deposit/:userId", getProfile, async (req, res) => {
 
 
 app.get("/admin/best-profession", async (req, res) => {
-    const result = await getBestProfession(req.app.get('models'), req);
+    const result = await getBestProfession(req, req.app.get('sequelize'));
     res.send(result);
 });
 
 
 app.get("/admin/best-clients", async (req, res) => {
-    const result = await getBestClients(req.app.get('models'), req);
+    const result = await getBestClients(req, req.app.get('sequelize'));
     res.send(result);
 });
 module.exports = app;
